@@ -183,6 +183,23 @@ func TestExtractItemFromPayloadPrefersTrackUnion(t *testing.T) {
 	}
 }
 
+func TestExtractItemArtistsIDName(t *testing.T) {
+	raw := map[string]any{
+		"uri":  "spotify:track:abc",
+		"name": "Song",
+		"artists": []any{
+			map[string]any{"id": "ar1", "name": "Artist One"},
+		},
+	}
+	item, ok := extractItem(raw, "track")
+	if !ok {
+		t.Fatalf("expected item")
+	}
+	if len(item.Artists) != 1 || item.Artists[0] != "Artist One" {
+		t.Fatalf("unexpected artists: %#v", item.Artists)
+	}
+}
+
 func TestExtractSearchItemsFallback(t *testing.T) {
 	payload := map[string]any{
 		"data": map[string]any{

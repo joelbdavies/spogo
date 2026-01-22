@@ -315,7 +315,7 @@ func artistNameFromValue(value any) string {
 	if name == "" {
 		return ""
 	}
-	if len(m) == 1 || isArtistMap(m) {
+	if len(m) == 1 || isArtistMap(m) || getString(m, "id") != "" {
 		return name
 	}
 	return ""
