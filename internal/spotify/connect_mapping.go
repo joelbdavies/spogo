@@ -22,6 +22,18 @@ func extractSearchItems(payload map[string]any, kind string) ([]Item, int) {
 }
 
 func extractItemFromPayload(payload map[string]any, kind string) (Item, bool) {
+	if kind == "track" {
+		if m, ok := getMap(payload, "data", "trackUnion"); ok {
+			if item, ok := extractItem(m, kind); ok {
+				return item, true
+			}
+		}
+		if m, ok := getMap(payload, "data", "track"); ok {
+			if item, ok := extractItem(m, kind); ok {
+				return item, true
+			}
+		}
+	}
 	items := collectItemsByKind(payload, kind)
 	if len(items) == 0 {
 		return Item{}, false
@@ -98,6 +110,11 @@ func extractItem(value any, kind string) (Item, bool) {
 	m, ok := value.(map[string]any)
 	if !ok {
 		return Item{}, false
+	}
+	if kind == "track" {
+		if inner, ok := m["track"].(map[string]any); ok {
+			m = inner
+		}
 	}
 	uri := getString(m, "uri")
 	if uri == "" && kind != "" {
@@ -217,23 +234,104 @@ func findFirstName(value any) string {
 
 func extractArtistNames(value any) []string {
 	artists := []string{}
-	walkMap(value, func(m map[string]any) {
-		if list, ok := m["artists"].([]any); ok {
-			for _, entry := range list {
-				if name := findFirstName(entry); name != "" {
-					artists = append(artists, name)
-				}
-			}
+	m, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if list, ok := m["artists"].([]any); ok {
+		appendArtistNames(&artists, list)
+	}
+	if group, ok := m["artists"].(map[string]any); ok {
+		if list, ok := group["items"].([]any); ok {
+			appendArtistNames(&artists, list)
 		}
-	})
+		if list, ok := group["nodes"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+		if list, ok := group["edges"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+	}
+	if group, ok := m["firstArtist"].(map[string]any); ok {
+		if list, ok := group["items"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+		if list, ok := group["nodes"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+		if list, ok := group["edges"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+	}
+	if group, ok := m["otherArtists"].(map[string]any); ok {
+		if list, ok := group["items"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+		if list, ok := group["nodes"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+		if list, ok := group["edges"].([]any); ok {
+			appendArtistNames(&artists, list)
+		}
+	}
 	if len(artists) == 0 {
-		if m, ok := value.(map[string]any); ok {
-			if name := getString(m, "artistName"); name != "" {
-				artists = append(artists, name)
-			}
+		if name := getString(m, "artistName"); name != "" {
+			artists = append(artists, name)
 		}
 	}
 	return dedupeStrings(artists)
+}
+
+func appendArtistNames(artists *[]string, entries []any) {
+	for _, entry := range entries {
+		if name := artistNameFromValue(entry); name != "" {
+			*artists = append(*artists, name)
+			continue
+		}
+	}
+}
+
+func artistNameFromValue(value any) string {
+	m, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	if profile, ok := m["profile"].(map[string]any); ok {
+		if name := getString(profile, "name"); name != "" {
+			return name
+		}
+	}
+	if node, ok := m["node"].(map[string]any); ok {
+		if name := artistNameFromValue(node); name != "" {
+			return name
+		}
+	}
+	if artist, ok := m["artist"].(map[string]any); ok {
+		if name := artistNameFromValue(artist); name != "" {
+			return name
+		}
+	}
+	name := getString(m, "name")
+	if name == "" {
+		return ""
+	}
+	if len(m) == 1 || isArtistMap(m) {
+		return name
+	}
+	return ""
+}
+
+func isArtistMap(m map[string]any) bool {
+	if uri := getString(m, "uri"); strings.HasPrefix(uri, "spotify:artist:") {
+		return true
+	}
+	if typ := getString(m, "type"); typ == "artist" {
+		return true
+	}
+	if _, ok := m["profile"]; ok {
+		return true
+	}
+	return false
 }
 
 func extractAlbumName(value any) string {
